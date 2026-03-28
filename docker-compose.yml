@@ -2,11 +2,13 @@ services:
   db:
     image: ghcr.io/5e-bits/5e-database:latest
     # build: ../5e-database
+    restart: unless-stopped
     ports:
       - '27017:27017'
 
   cache:
     image: redis:6.2.5
+    restart: unless-stopped
     ports:
       - '6379:6379'
 
@@ -15,6 +17,7 @@ services:
       MONGODB_URI: mongodb://db/5e-database
       REDIS_URL: redis://cache:6379
     build: .
+    restart: unless-stopped
     ports:
       - '3000:3000'
     depends_on:
