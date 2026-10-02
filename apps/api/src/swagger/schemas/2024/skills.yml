@@ -1,0 +1,9 @@
+skill-model:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        description:
+          type: string
+        ability_score:
+          $ref: './common.yml#/api-ref-model-2024'

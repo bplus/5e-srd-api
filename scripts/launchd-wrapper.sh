@@ -5,7 +5,8 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export HOME="/Users/bryan"
 
-cd /Users/bryan/work/5e-srd-api
+# The compose stack lives in apps/api since the upstream pnpm-monorepo migration.
+cd /Users/bryan/work/5e-srd-api/apps/api
 
 # Wait for Docker/OrbStack to be available (up to 60s)
 for i in $(seq 1 30); do

@@ -1,0 +1,23 @@
+condition-model-2024:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        description:
+          type: string
+
+damage-type-model-2024:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        description:
+          type: string
+
+magic-school-model-2024:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        description:
+          type: string

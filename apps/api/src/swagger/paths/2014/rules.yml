@@ -1,0 +1,50 @@
+get:
+  summary: 'Get a rule by index.'
+  description: |
+    # Rule
+
+    Rules are the headings of the SRD that document the mechanics of Dungeons and Dragons.
+    Each rule holds the text directly under its heading in `desc`, and links to the rule
+    it is nested under (`parent`) and the subheadings nested under it (`children`, in SRD order).
+    Top-level rules such as `combat` have no `parent`.
+  tags:
+    - Rules
+  parameters:
+    - $ref: '../../parameters/2014/combined.yml#/rule-index'
+  responses:
+    '200':
+      description: OK
+      content:
+        application/json:
+          schema:
+            $ref: '../../schemas/2014/combined.yml#/Rule'
+          example:
+            index: ability-checks
+            name: Ability Checks
+            url: '/api/2014/rules/ability-checks'
+            desc: |
+              An ability check tests a character's or monster's innate talent and training in an effort to overcome a challenge. The GM calls for an ability check when a character or monster attempts an action (other than an attack) that has a chance of failure. When the outcome is uncertain, the dice determine the results.
+
+              For every ability check, the GM decides which of the six abilities is relevant to the task at hand and the difficulty of the task, represented by a Difficulty Class.
+
+              The more difficult a task, the higher its DC. The Typical Difficulty Classes table shows the most common DCs.
+            parent:
+              index: using-ability-scores
+              name: Using Ability Scores
+              url: '/api/2014/rules/using-ability-scores'
+            children:
+              - index: typical-difficulty-classes
+                name: Typical Difficulty Classes
+                url: '/api/2014/rules/typical-difficulty-classes'
+              - index: contests
+                name: Contests
+                url: '/api/2014/rules/contests'
+              - index: skills
+                name: Skills
+                url: '/api/2014/rules/skills'
+              - index: passive-checks
+                name: Passive Checks
+                url: '/api/2014/rules/passive-checks'
+              - index: working-together
+                name: Working Together
+                url: '/api/2014/rules/working-together'

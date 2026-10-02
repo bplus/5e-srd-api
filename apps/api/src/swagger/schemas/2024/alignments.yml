@@ -1,0 +1,9 @@
+alignment-model:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        abbreviation:
+          type: string
+        description:
+          type: string

@@ -1,0 +1,125 @@
+import 'reflect-metadata' // Must be imported first
+
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+import { expressMiddleware } from '@as-integrations/express5'
+import cors from 'cors'
+import express from 'express'
+import rateLimit from 'express-rate-limit'
+import morgan from 'morgan'
+import { buildSchema } from 'type-graphql'
+
+import docsController from './controllers/docsController'
+import { resolvers as resolvers2014 } from './graphql/2014/resolvers'
+import { resolvers as resolvers2024 } from './graphql/2024/resolvers'
+import { TranslationMiddleware } from './graphql/middleware/translationMiddleware'
+import { createApolloMiddleware } from './middleware/apolloServer'
+import errorHandlerMiddleware from './middleware/errorHandler'
+import httpsRedirect from './middleware/httpsRedirect'
+import languageNegotiation from './middleware/languageNegotiation'
+import { Sentry, sentryEnabled } from './middleware/sentry'
+import apiRoutes from './routes/api'
+
+const __filename = fileURLToPath(import.meta.url)
+
+const __dirname = path.dirname(__filename)
+
+const rateLimitWindowMs =
+  process.env.RATE_LIMIT_WINDOW_MS != null ? parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) : 1000 // Default 1 second
+
+const rateLimitMax =
+  process.env.RATE_LIMIT_MAX != null ? parseInt(process.env.RATE_LIMIT_MAX, 10) : 50 // Default 50
+
+const limiter = rateLimit({
+  windowMs: rateLimitWindowMs,
+  max: rateLimitMax,
+  message: `Rate limit of ${rateLimitMax} requests per ${rateLimitWindowMs / 1000} second(s) exceeded, try again later.`
+})
+
+/**
+ * Schema building and Apollo startup are expensive and app-independent, so cache them.
+ * Prod builds the app once; test workers without file isolation reuse it across files.
+ */
+let apolloServers: ReturnType<typeof createApolloServers> | undefined
+const getApolloServers = () => (apolloServers ??= createApolloServers())
+
+const createApolloServers = async () => {
+  console.log('Building TypeGraphQL schema...')
+  const schema2014 = await buildSchema({
+    resolvers: resolvers2014,
+    globalMiddlewares: [TranslationMiddleware],
+    validate: { forbidUnknownValues: false }
+  })
+  const schema2024 = await buildSchema({
+    resolvers: resolvers2024,
+    globalMiddlewares: [TranslationMiddleware],
+    validate: { forbidUnknownValues: false }
+  })
+  console.log('TypeGraphQL schema built successfully.')
+
+  console.log('Setting up Apollo GraphQL server')
+  const apolloMiddleware2024 = await createApolloMiddleware(schema2024)
+  await apolloMiddleware2024.start()
+  const apolloMiddleware2014 = await createApolloMiddleware(schema2014)
+  await apolloMiddleware2014.start()
+  return { apolloMiddleware2014, apolloMiddleware2024 }
+}
+
+export default async () => {
+  const app = express()
+  app.set('trust proxy', 1)
+  app.use(httpsRedirect)
+
+  // Middleware stuff
+  app.use('/swagger', express.static(__dirname + '/swagger'))
+  app.use('/css', express.static(__dirname + '/css'))
+  app.use('/public', express.static(__dirname + '/public'))
+  app.use(morgan('short'))
+  // Enable all CORS requests
+  app.use(cors())
+
+  app.use(limiter)
+  app.use(languageNegotiation)
+
+  const { apolloMiddleware2014, apolloMiddleware2024 } = await getApolloServers()
+  app.use(
+    '/graphql/2024',
+    cors<cors.CorsRequest>(),
+    express.json(),
+    expressMiddleware(apolloMiddleware2024, {
+      context: async ({ req }) => ({ token: req.headers.token, lang: req.lang ?? 'en' })
+    })
+  )
+  app.use(
+    '/graphql/2014',
+    cors<cors.CorsRequest>(),
+    express.json(),
+    expressMiddleware(apolloMiddleware2014, {
+      context: async ({ req }) => ({ token: req.headers.token, lang: req.lang ?? 'en' })
+    })
+  )
+  // DEPRECATED
+  app.use(
+    '/graphql',
+    cors<cors.CorsRequest>(),
+    express.json(),
+    expressMiddleware(apolloMiddleware2014, {
+      context: async ({ req }) => ({ token: req.headers.token, lang: req.lang ?? 'en' })
+    })
+  )
+
+  // Register routes
+  app.get('/', (req, res) => {
+    res.sendFile('index.html', { root: path.join(__dirname, 'public') })
+  })
+  app.get('/docs', docsController)
+  app.use('/api', apiRoutes)
+
+  if (sentryEnabled) {
+    Sentry.setupExpressErrorHandler(app)
+  }
+
+  app.use(errorHandlerMiddleware)
+  return app
+}

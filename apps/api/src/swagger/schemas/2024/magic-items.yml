@@ -1,0 +1,34 @@
+rarity-model:
+  type: object
+  properties:
+    name:
+      type: string
+      description: 'The name of the rarity level (e.g., Common, Uncommon, Rare).'
+
+magic-item-model-2024:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        desc:
+          type: array
+          items:
+            type: string
+          description: 'Markdown paragraphs; tables are Markdown table strings.'
+        image:
+          type: string
+        equipment_category:
+          $ref: './common.yml#/api-ref-model-2024'
+        attunement:
+          type: boolean
+        variant:
+          type: boolean
+        variants:
+          type: array
+          items:
+            $ref: './common.yml#/api-ref-model-2024'
+        rarity:
+          $ref: '#/rarity-model'
+        limited_to:
+          type: string
+          description: 'Class restriction for attunement (e.g., "by a wizard").'

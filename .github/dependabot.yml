@@ -5,13 +5,48 @@
 
 version: 2
 updates:
-  - package-ecosystem: 'npm' # See documentation for possible values
-    directory: '/' # Location of package manifests
+  # Workspace root so Dependabot sees pnpm-workspace.yaml and updates the shared pnpm-lock.yaml.
+  - package-ecosystem: 'npm'
+    directory: '/'
+    open-pull-requests-limit: 15
+    schedule:
+      interval: 'weekly'
+    commit-message:
+      # fix(deps) makes release-please cut a patch release for runtime bumps.
+      prefix: 'fix'
+      prefix-development: 'chore'
+      include: 'scope'
+    groups:
+      react:
+        patterns:
+          - 'react'
+          - 'react-dom'
+          - 'react-*'
+          - '@types/react'
+          - '@types/react-dom'
+      docusaurus:
+        patterns:
+          - '@docusaurus/*'
+      sentry:
+        patterns:
+          - '@sentry/*'
+  - package-ecosystem: 'docker'
+    directory: '/apps/api'
+    schedule:
+      interval: 'weekly'
+    commit-message:
+      prefix: 'fix'
+      include: 'scope'
+  - package-ecosystem: 'docker'
+    directory: '/packages/5e-database'
     schedule:
       interval: 'weekly'
     commit-message:
       prefix: 'chore'
       include: 'scope'
+    ignore:
+      - dependency-name: 'mongo'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: 'github-actions'
     # Workflow files stored in the default location of `.github/workflows`. (You don't need to specify `/.github/workflows` for `directory`. You can use `directory: "/"`.)
     directory: '/'

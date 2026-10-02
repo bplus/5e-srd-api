@@ -1,0 +1,34 @@
+import { Model } from 'mongoose'
+
+import MagicItem from '@/models/2014/magicItem'
+import Monster from '@/models/2014/monster'
+import Rule from '@/models/2014/rule'
+import Spell from '@/models/2014/spell'
+
+import { ResourceList } from './data'
+import redisClient from './RedisClient'
+
+type PrewarmData = {
+  Schema: Model<any>
+  endpoint: string
+}
+
+const prewarmCache = async () => {
+  await redisClient.flushDb()
+
+  const toPrewarm: PrewarmData[] = [
+    { Schema: MagicItem, endpoint: '/api/2014/magic-items' },
+    { Schema: Spell, endpoint: '/api/2014/spells' },
+    { Schema: Monster, endpoint: '/api/2014/monsters' },
+    { Schema: Rule, endpoint: '/api/2014/rules' }
+  ]
+  for (const element of toPrewarm) {
+    const data = await element.Schema.find()
+      .select({ index: 1, level: 1, name: 1, url: 1, _id: 0 })
+      .sort({ index: 'asc' })
+    const jsonData = ResourceList(data)
+    await redisClient.set(element.endpoint, JSON.stringify(jsonData))
+  }
+}
+
+export default prewarmCache

@@ -1,0 +1,9 @@
+language-model:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        is_rare:
+          type: boolean
+        note:
+          type: string

@@ -1,0 +1,13 @@
+ability-score-model-2024:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        full_name:
+          type: string
+        description:
+          type: string
+        skills:
+          type: array
+          items:
+            $ref: './common.yml#/api-ref-model-2024'

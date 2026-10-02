@@ -1,0 +1,73 @@
+import { NextFunction, Request, Response } from 'express'
+
+import { parseRequest } from '@/controllers/parseRequest'
+import { relatedList } from '@/controllers/relatedList'
+import SimpleController from '@/controllers/simpleController'
+import Feature from '@/models/2014/feature'
+import Level from '@/models/2014/level'
+import Subclass from '@/models/2014/subclass'
+import { LevelParamsSchema, ShowParamsSchema } from '@/schemas/schemas'
+import { applyTranslation, applyTranslationToList } from '@/util/translation'
+
+const simpleController = new SimpleController(Subclass)
+
+export const index = async (req: Request, res: Response, next: NextFunction) =>
+  simpleController.index(req, res, next)
+export const show = async (req: Request, res: Response, next: NextFunction) =>
+  simpleController.show(req, res, next)
+
+export const showLevelsForSubclass = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const validatedParams = parseRequest(req, res, 'params', ShowParamsSchema)
+    if (validatedParams === undefined) return
+    const { index } = validatedParams
+    const lang = req.lang ?? 'en'
+
+    const urlString = '/api/2014/subclasses/' + index
+
+    const data = await Level.find({ 'subclass.url': urlString }).sort({ level: 'asc' })
+    const { docs: translated, wasTranslated } = await applyTranslationToList(
+      data.map((d: any) => d.toObject()),
+      '2014-levels',
+      lang
+    )
+    res.setHeader('Content-Language', wasTranslated ? lang : 'en')
+    return res.status(200).json(translated)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const showLevelForSubclass = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const validatedParams = parseRequest(req, res, 'params', LevelParamsSchema)
+    if (validatedParams === undefined) return
+    const { index, level } = validatedParams
+    const lang = req.lang ?? 'en'
+
+    const urlString = '/api/2014/subclasses/' + index + '/levels/' + level
+
+    const data = await Level.findOne({ url: urlString })
+    if (!data) return next()
+
+    const plain = data.toObject()
+    const translated = await applyTranslation(plain as any, '2014-levels', lang)
+    res.setHeader('Content-Language', translated !== plain ? lang : 'en')
+    return res.status(200).json(translated)
+  } catch (err) {
+    next(err)
+  }
+}
+
+export const showFeaturesForSubclass = relatedList({
+  Model: Feature,
+  filter: ({ index }) => ({ 'subclass.url': '/api/2014/subclasses/' + index }),
+  sort: { level: 'asc', url: 'asc' }
+})
+
+export const showFeaturesForSubclassAndLevel = relatedList({
+  Model: Feature,
+  paramsSchema: LevelParamsSchema,
+  filter: ({ index, level }) => ({ level, 'subclass.url': '/api/2014/subclasses/' + index }),
+  sort: { level: 'asc', url: 'asc' }
+})

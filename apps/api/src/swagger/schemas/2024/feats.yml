@@ -1,0 +1,26 @@
+feat-prerequisites-model:
+  type: object
+  properties:
+    minimum_level:
+      type: integer
+    feature_named:
+      type: string
+      description: 'Name of a feature (e.g. Spellcasting) required.'
+
+feat-model:
+  allOf:
+    - $ref: './combined.yml#/SrdResource'
+    - type: object
+      properties:
+        description:
+          type: string
+        type:
+          type: string
+          description: 'The type of feat (origin, general, fighting-style, epic-boon).'
+        repeatable:
+          type: string
+          description: 'Repeatability note, if applicable.'
+        prerequisites:
+          $ref: '#/feat-prerequisites-model'
+        prerequisite_options:
+          $ref: './common.yml#/choice-model-2024'

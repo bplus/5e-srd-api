@@ -1,6 +1,3 @@
-# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
-
 name: CI
 
 on:
@@ -9,40 +6,85 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
-  lint:
-    name: Run linter
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      infra: ${{ steps.filter.outputs.infra }}
+      docs: ${{ steps.filter.outputs.docs }}
+      db: ${{ steps.filter.outputs.db }}
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # @v6.0.0
-      - name: Use Node.js 22.x
-        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # @v6.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # @v7.0.0
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # @v4.0.3
+        id: filter
         with:
-          node-version: 22.x
-      - run: npm install
-      - name: Lint Code
-        run: npm run lint
-      - name: Validate OpenAPI Spec
-        run: npm run validate-swagger
+          filters: |
+            api:
+              - apps/api/**
+              - packages/5e-database/**
+              - pnpm-lock.yaml
+              - pnpm-workspace.yaml
+              - package.json
+              - .github/workflows/ci.yml
+              - .github/workflows/api-ci.yml
+              - .github/actions/setup-node-pnpm/**
+            infra:
+              - apps/infrastructure/**
+              - pnpm-lock.yaml
+              - pnpm-workspace.yaml
+              - package.json
+              - .github/workflows/ci.yml
+              - .github/workflows/infra-ci.yml
+              - .github/actions/setup-node-pnpm/**
+            docs:
+              - apps/docs/**
+              - pnpm-lock.yaml
+              - pnpm-workspace.yaml
+              - package.json
+              - .github/workflows/ci.yml
+              - .github/workflows/docs-ci.yml
+              - .github/actions/setup-node-pnpm/**
+            db:
+              - packages/5e-database/**
+              - pnpm-lock.yaml
+              - pnpm-workspace.yaml
+              - package.json
+              - .github/workflows/ci.yml
+              - .github/workflows/db-ci.yml
+              - .github/actions/setup-node-pnpm/**
 
-  unit:
-    name: Run tests
+  api:
+    name: API
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    uses: ./.github/workflows/api-ci.yml
+
+  infra:
+    name: Infrastructure
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    uses: ./.github/workflows/infra-ci.yml
+
+  docs:
+    name: Docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    uses: ./.github/workflows/docs-ci.yml
+
+  db:
+    name: Database
+    needs: changes
+    if: needs.changes.outputs.db == 'true'
+    uses: ./.github/workflows/db-ci.yml
+
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [changes, api, infra, docs, db]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # @v6.0.0
-      - name: Use Node.js 22.x
-        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # @v6.0.0
-        with:
-          node-version: 22.x
-      - run: npm install
-      - run: npm run test:unit
-
-  integration:
-    name: Run Integration tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # @v6.0.0
-      - run: npm run test:integration:local
+      - name: Fail if any job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

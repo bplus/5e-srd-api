@@ -1,0 +1,318 @@
+import { createRequest, createResponse } from 'node-mocks-http'
+import { describe, expect, it, vi } from 'vitest'
+
+import SpellController from '@/controllers/api/2014/spellController'
+import SpellModel from '@/models/2014/spell'
+import Translation2014Model from '@/models/2014/translation'
+import { spellFactory } from '@/tests/factories/2014/spell.factory'
+import { mockNext as defaultMockNext } from '@/tests/support'
+// Import the DB helper functions
+import {
+  generateUniqueDbUri,
+  setupIsolatedDatabase,
+  setupModelCleanup,
+  teardownIsolatedDatabase
+} from '@/tests/support/db'
+
+const mockNext = vi.fn(defaultMockNext)
+
+// Generate URI for this test file
+const dbUri = generateUniqueDbUri('spell')
+
+// Setup hooks using helpers
+setupIsolatedDatabase(dbUri)
+teardownIsolatedDatabase()
+setupModelCleanup(SpellModel)
+setupModelCleanup(Translation2014Model)
+
+describe('SpellController', () => {
+  describe('index', () => {
+    it('returns a list of spells', async () => {
+      // Arrange
+      const spellsData = spellFactory.buildList(3)
+      // Use insertMany directly
+      await SpellModel.insertMany(spellsData)
+
+      const request = createRequest({ query: {} })
+      const response = createResponse()
+
+      // Act
+      await SpellController.index(request, response, mockNext)
+
+      // Assert
+      expect(response.statusCode).toBe(200)
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.count).toBe(3)
+      expect(responseData.results).toHaveLength(3)
+      expect(responseData.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ index: spellsData[0].index, name: spellsData[0].name }),
+          expect.objectContaining({ index: spellsData[1].index, name: spellsData[1].name }),
+          expect.objectContaining({ index: spellsData[2].index, name: spellsData[2].name })
+        ])
+      )
+      expect(mockNext).not.toHaveBeenCalled()
+    })
+
+    describe('with level query', () => {
+      const levelTestCases = [
+        { input: '1', expectedCount: 2, seedLevels: [1, 2, 1] },
+        { input: '1,2', expectedCount: 3, seedLevels: [1, 2, 1] }, // comma-separated (the bug case)
+        { input: ['1', '2'], expectedCount: 2, seedLevels: [1, 2, 3] }, // repeated param array
+        { input: 'abc,1,def,2', expectedCount: 2, seedLevels: [1, 2, 3] }, // mixed valid/invalid tokens
+        { input: ['3', 'xyz', '5'], expectedCount: 2, seedLevels: [3, 5, 7] }, // array with invalid
+        { input: 'invalid', expectedCount: 3, seedLevels: [1, 2, 3] }, // all invalid → no filter applied
+        { input: '', expectedCount: 3, seedLevels: [1, 2, 3] } // empty → no filter applied
+      ]
+
+      it.each(levelTestCases)(
+        'handles level: $input',
+        async ({ input, expectedCount, seedLevels }) => {
+          const spellsToSeed = seedLevels.map((lvl, i) =>
+            spellFactory.build({ level: lvl, name: `Spell ${i}` })
+          )
+          await SpellModel.insertMany(spellsToSeed)
+
+          const request = createRequest({ query: { level: input } })
+          const response = createResponse()
+
+          await SpellController.index(request, response, mockNext)
+
+          expect(response.statusCode).toBe(200)
+          const responseData = JSON.parse(response._getData())
+          expect(responseData.count).toBe(expectedCount)
+          expect(responseData.results).toHaveLength(expectedCount)
+          expect(mockNext).not.toHaveBeenCalled()
+        }
+      )
+    })
+
+    describe('with school query', () => {
+      const schoolTestCases = [
+        {
+          input: 'evocation',
+          expectedCount: 1,
+          seedSchools: ['Evocation', 'Illusion', 'Abjuration']
+        },
+        {
+          input: 'evocation,illusion',
+          expectedCount: 2,
+          seedSchools: ['Evocation', 'Illusion', 'Abjuration']
+        },
+        {
+          input: ['evocation', 'illusion'],
+          expectedCount: 2,
+          seedSchools: ['Evocation', 'Illusion', 'Abjuration']
+        },
+        { input: 'illu', expectedCount: 1, seedSchools: ['Evocation', 'Illusion', 'Abjuration'] },
+        {
+          input: 'EVOCATION',
+          expectedCount: 1,
+          seedSchools: ['Evocation', 'Illusion', 'Abjuration']
+        },
+        {
+          input: 'invalid',
+          expectedCount: 0,
+          seedSchools: ['Evocation', 'Illusion', 'Abjuration']
+        },
+        {
+          input: 'illu,evo',
+          expectedCount: 2,
+          seedSchools: ['Evocation', 'Illusion', 'Abjuration']
+        },
+        { input: 'evocation', expectedCount: 0, seedSchools: ['Illusion', 'Abjuration'] },
+        {
+          input: 'randomStaff',
+          expectedCount: 0,
+          seedSchools: ['Evocation', 'Illusion', 'Abjuration']
+        },
+        { input: '', expectedCount: 3, seedSchools: ['Evocation', 'Illusion', 'Abjuration'] },
+        { input: '   ', expectedCount: 3, seedSchools: ['Evocation', 'Illusion', 'Abjuration'] }
+      ]
+
+      it.each(schoolTestCases)(
+        'handles school: $input',
+        async ({ input, expectedCount, seedSchools }) => {
+          const spellsToSeed = seedSchools.map((sch, i) =>
+            spellFactory.build({ school: { name: sch }, name: `Spell ${i}` })
+          )
+          await SpellModel.insertMany(spellsToSeed)
+
+          const request = createRequest({ query: { school: input } })
+          const response = createResponse()
+
+          await SpellController.index(request, response, mockNext)
+
+          expect(response.statusCode).toBe(200)
+          const responseData = JSON.parse(response._getData())
+          expect(responseData.count).toBe(expectedCount)
+          expect(responseData.results).toHaveLength(expectedCount)
+          expect(mockNext).not.toHaveBeenCalled()
+        }
+      )
+    })
+
+    it('returns an empty list when no spells exist', async () => {
+      // Arrange
+      const request = createRequest({ query: {} })
+      const response = createResponse()
+
+      // Act
+      await SpellController.index(request, response, mockNext)
+
+      // Assert
+      expect(response.statusCode).toBe(200)
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.count).toBe(0)
+      expect(responseData.results).toEqual([])
+      expect(mockNext).not.toHaveBeenCalled()
+    })
+
+    it('returns translated names and Content-Language header when translations exist', async () => {
+      const spellData = spellFactory.build({ index: 'fireball', name: 'Fireball' })
+      await SpellModel.insertMany([spellData])
+      await Translation2014Model.insertMany([
+        {
+          source_index: 'fireball',
+          source_collection: 'spells',
+          lang: 'fr-FR',
+          fields: { name: 'Boule de Feu' },
+          completeness: 1.0,
+          updated_at: new Date().toISOString()
+        }
+      ])
+
+      const request = createRequest({ query: {} })
+      request.lang = 'fr-FR'
+      const response = createResponse()
+
+      await SpellController.index(request, response, mockNext)
+
+      expect(response.statusCode).toBe(200)
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.results[0].name).toBe('Boule de Feu')
+      expect(response.getHeader('Content-Language')).toBe('fr-FR')
+      expect(mockNext).not.toHaveBeenCalled()
+    })
+
+    it('returns Content-Language: en when no translations exist for lang', async () => {
+      const spellsData = spellFactory.buildList(2)
+      await SpellModel.insertMany(spellsData)
+
+      const request = createRequest({ query: {} })
+      request.lang = 'de-DE'
+      const response = createResponse()
+
+      await SpellController.index(request, response, mockNext)
+
+      expect(response.statusCode).toBe(200)
+      expect(response.getHeader('Content-Language')).toBe('en')
+      expect(mockNext).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('show', () => {
+    it('returns a single spell when found', async () => {
+      // Arrange
+      const spellData = spellFactory.build({ index: 'fireball', name: 'Fireball' })
+      await SpellModel.insertMany([spellData])
+
+      const request = createRequest({ params: { index: 'fireball' } })
+      const response = createResponse()
+
+      // Act
+      await SpellController.show(request, response, mockNext)
+
+      // Assert
+      expect(response.statusCode).toBe(200)
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.index).toBe('fireball')
+      expect(responseData.name).toBe('Fireball')
+      expect(responseData.desc).toEqual(spellData.desc)
+      expect(responseData.level).toEqual(spellData.level)
+      expect(mockNext).not.toHaveBeenCalled()
+    })
+
+    it('returns multiple damage entries for spells with more than one damage type', async () => {
+      // Arrange
+      const damage = [
+        { damage_type: { index: 'fire', name: 'Fire', url: '/api/2014/damage-types/fire' } },
+        { damage_type: { index: 'cold', name: 'Cold', url: '/api/2014/damage-types/cold' } }
+      ]
+      const spellData = spellFactory.build({ index: 'ice-storm', name: 'Ice Storm', damage })
+      await SpellModel.insertMany([spellData])
+
+      const request = createRequest({ params: { index: 'ice-storm' } })
+      const response = createResponse()
+
+      // Act
+      await SpellController.show(request, response, mockNext)
+
+      // Assert
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.damage).toHaveLength(2)
+      expect(responseData.damage[0].damage_type.index).toBe('fire')
+      expect(responseData.damage[1].damage_type.index).toBe('cold')
+    })
+
+    it('calls next() when the spell is not found', async () => {
+      // Arrange
+      const request = createRequest({ params: { index: 'nonexistent' } })
+      const response = createResponse()
+
+      // Act
+      await SpellController.show(request, response, mockNext)
+
+      // Assert
+      expect(response.statusCode).toBe(200)
+      expect(response._getData()).toBe('')
+      expect(mockNext).toHaveBeenCalledOnce()
+      expect(mockNext).toHaveBeenCalledWith()
+    })
+
+    it('returns translated fields and Content-Language header when a translation exists', async () => {
+      const spellData = spellFactory.build({ index: 'fireball', name: 'Fireball' })
+      await SpellModel.insertMany([spellData])
+      await Translation2014Model.insertMany([
+        {
+          source_index: 'fireball',
+          source_collection: 'spells',
+          lang: 'fr-FR',
+          fields: { name: 'Boule de Feu', desc: ['Description en français'] },
+          completeness: 1.0,
+          updated_at: new Date().toISOString()
+        }
+      ])
+
+      const request = createRequest({ params: { index: 'fireball' } })
+      request.lang = 'fr-FR'
+      const response = createResponse()
+
+      await SpellController.show(request, response, mockNext)
+
+      expect(response.statusCode).toBe(200)
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.name).toBe('Boule de Feu')
+      expect(responseData.desc).toEqual(['Description en français'])
+      expect(response.getHeader('Content-Language')).toBe('fr-FR')
+      expect(mockNext).not.toHaveBeenCalled()
+    })
+
+    it('returns original content and Content-Language: en when no translation exists for lang', async () => {
+      const spellData = spellFactory.build({ index: 'fireball', name: 'Fireball' })
+      await SpellModel.insertMany([spellData])
+
+      const request = createRequest({ params: { index: 'fireball' } })
+      request.lang = 'de-DE'
+      const response = createResponse()
+
+      await SpellController.show(request, response, mockNext)
+
+      expect(response.statusCode).toBe(200)
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.name).toBe('Fireball')
+      expect(response.getHeader('Content-Language')).toBe('en')
+      expect(mockNext).not.toHaveBeenCalled()
+    })
+  })
+})

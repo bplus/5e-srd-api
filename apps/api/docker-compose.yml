@@ -1,0 +1,34 @@
+services:
+  db:
+    build:
+      context: ../..
+      dockerfile: packages/5e-database/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    # The image's 30s default interval stalls `--wait`.
+    healthcheck:
+      interval: 2s
+
+  cache:
+    image: redis:6.2.5
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+
+  api:
+    environment:
+      MONGODB_URI: mongodb://db/5e-database
+      REDIS_URL: redis://cache:6379
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    depends_on:
+      - db
+      - cache
