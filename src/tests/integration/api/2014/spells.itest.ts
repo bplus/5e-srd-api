@@ -172,6 +172,14 @@ describe('/api/2014/spells', () => {
       expect(showRes.body.index).toEqual(index)
     })
 
+    it('serves damage as an array of damage entries', async () => {
+      const showRes = await request(app).get('/api/2014/spells/fireball')
+      expect(showRes.statusCode).toEqual(200)
+      expect(Array.isArray(showRes.body.damage)).toBe(true)
+      expect(showRes.body.damage[0].damage_type.index).toEqual('fire')
+      expect(showRes.body.damage[0].damage_at_slot_level['3']).toEqual('8d6')
+    })
+
     describe('with an invalid index', () => {
       it('should return 404', async () => {
         const invalidIndex = 'invalid-index'

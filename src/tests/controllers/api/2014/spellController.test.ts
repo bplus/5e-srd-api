@@ -115,6 +115,53 @@ describe('SpellController', () => {
       expect(mockNext).not.toHaveBeenCalled()
     })
 
+    it('returns multiple damage entries for spells with more than one damage type', async () => {
+      // Arrange
+      const damage = [
+        { damage_type: { index: 'fire', name: 'Fire', url: '/api/2014/damage-types/fire' } },
+        { damage_type: { index: 'cold', name: 'Cold', url: '/api/2014/damage-types/cold' } }
+      ]
+      const spellData = spellFactory.build({ index: 'ice-storm', name: 'Ice Storm', damage })
+      await SpellModel.insertMany([spellData])
+
+      const request = createRequest({ params: { index: 'ice-storm' } })
+      const response = createResponse()
+
+      // Act
+      await SpellController.show(request, response, mockNext)
+
+      // Assert
+      const responseData = JSON.parse(response._getData())
+      expect(responseData.damage).toHaveLength(2)
+      expect(responseData.damage[0].damage_type.index).toBe('fire')
+      expect(responseData.damage[1].damage_type.index).toBe('cold')
+    })
+
+    it('returns damage as an array including damage_at_slot_level', async () => {
+      // Arrange
+      const damage = [
+        {
+          damage_type: { index: 'fire', name: 'Fire', url: '/api/2014/damage-types/fire' },
+          damage_at_slot_level: { 3: '8d6', 4: '9d6' }
+        }
+      ]
+      const spellData = spellFactory.build({ index: 'fireball', name: 'Fireball', damage })
+      await SpellModel.insertMany([spellData])
+
+      const request = createRequest({ params: { index: 'fireball' } })
+      const response = createResponse()
+
+      // Act
+      await SpellController.show(request, response, mockNext)
+
+      // Assert
+      expect(response.statusCode).toBe(200)
+      const responseData = JSON.parse(response._getData())
+      expect(Array.isArray(responseData.damage)).toBe(true)
+      expect(responseData.damage[0].damage_type.index).toBe('fire')
+      expect(responseData.damage[0].damage_at_slot_level['3']).toBe('8d6')
+    })
+
     it('calls next() when the spell is not found', async () => {
       // Arrange
       const request = createRequest({ params: { index: 'nonexistent' } })
